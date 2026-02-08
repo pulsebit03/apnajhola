@@ -30,6 +30,8 @@ create table if not exists app_users (
 -- Enable RLS for App Users
 alter table app_users enable row level security;
 create policy "Enable read access for all users" on app_users for select using (true);
+create policy "Enable update for users based on email" on app_users for update using (auth.uid() = id);
+create policy "Enable insert for users based on email" on app_users for insert with check (auth.uid() = id);
 create policy "Admin update users" on app_users for update using (true);
 
 -- Add banned column
@@ -123,3 +125,59 @@ create policy "Authenticated Insert Banners"
 on storage.objects for insert 
 with check ( bucket_id = 'banners' AND auth.role() = 'authenticated' );
 
+
+-- Create Addresses Table
+create table if not exists addresses (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users not null,
+  title text default 'Home', -- e.g. Home, Work
+  address text not null,
+  city text not null,
+  pincode text not null,
+  is_default boolean default false,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Enable RLS for Addresses
+alter table addresses enable row level security;
+
+-- Policies for Addresses
+create policy "Users can view their own addresses" on addresses for select using (auth.uid() = user_id);
+create policy "Users can insert their own addresses" on addresses for insert with check (auth.uid() = user_id);
+create policy "Users can update their own addresses" on addresses for update using (auth.uid() = user_id);
+create policy "Users can delete their own addresses" on addresses for delete using (auth.uid() = user_id);
+
+-- Optional: Function to handle setting default address (prevents multiple defaults)
+create or replace function handle_default_address()
+returns trigger as 6892
+begin
+  if new.is_default then
+    update addresses set is_default = false where user_id = new.user_id and id <> new.id;
+  end if;
+  return new;
+end;
+6892 language plpgsql;
+
+-- Trigger for default address
+drop trigger if exists on_address_default_change on addresses;
+create trigger on_address_default_change
+  before insert or update on addresses
+  for each row execute procedure handle_default_address();
+
+-- Allow users to delete their own profile data
+create policy "Users can delete their own app_users record" on app_users for delete using (auth.uid() = id);
+
+-- (Optional) Trigger to delete auth.users (Login Credentials) when app_users is deleted
+-- This ensures that when a user deletes their profile from the app, their login is also removed.
+create or replace function public.handle_user_delete()
+returns trigger as $$
+begin
+  delete from auth.users where id = old.id;
+  return old;
+end;
+$$ language plpgsql security definer;
+
+drop trigger if exists on_profile_user_deleted on public.app_users;
+create trigger on_profile_user_deleted
+  after delete on public.app_users
+  for each row execute procedure public.handle_user_delete();

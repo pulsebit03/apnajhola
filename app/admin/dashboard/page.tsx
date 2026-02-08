@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Image as ImageIcon, CheckCircle, AlertCircle, Trash2, Users, Package, TrendingUp, LogOut, Pencil, X, Search, Ban, Unlock } from 'lucide-react';
+import { Plus, Image as ImageIcon, CheckCircle, AlertCircle, Trash2, Users, Package, TrendingUp, LogOut, Pencil, X, Search, Ban, Unlock, Bell, Send } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface Product {
@@ -26,7 +26,7 @@ interface AppUser {
 
 export default function AdminDashboard() {
     const router = useRouter();
-    const [activeTab, setActiveTab] = useState<'products' | 'users' | 'banners'>('products');
+    const [activeTab, setActiveTab] = useState<'products' | 'users' | 'banners' | 'notifications'>('products');
 
     // Data State
     const [products, setProducts] = useState<Product[]>([]);
@@ -123,6 +123,12 @@ export default function AdminDashboard() {
     const [bannerImageFile, setBannerImageFile] = useState<File | null>(null);
     const [bannerImageUrl, setBannerImageUrl] = useState('');
     const [banners, setBanners] = useState<any[]>([]);
+
+    // Notification states
+    const [notificationTitle, setNotificationTitle] = useState('');
+    const [notificationMessage, setNotificationMessage] = useState('');
+    const [notificationType, setNotificationType] = useState<'general' | 'offer' | 'order'>('general');
+    const [sendingNotification, setSendingNotification] = useState(false);
 
     const handleBannerImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -321,6 +327,66 @@ export default function AdminDashboard() {
         setLoading(false);
     };
 
+    const handleSendNotification = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!notificationTitle.trim() || !notificationMessage.trim()) {
+            setMessage('Please fill in title and message');
+            setIsError(true);
+            return;
+        }
+
+        setSendingNotification(true);
+        setMessage('');
+        setIsError(false);
+
+        try {
+            // Insert notification directly to Supabase
+            const { error: dbError } = await supabase
+                .from('notifications')
+                .insert({
+                    title: notificationTitle,
+                    message: notificationMessage,
+                    type: notificationType,
+                });
+
+            if (dbError) throw dbError;
+
+            // Try to send push notification via Edge Function
+            try {
+                const response = await fetch(
+                    `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-push-notification`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+                        },
+                        body: JSON.stringify({
+                            title: notificationTitle,
+                            message: notificationMessage,
+                            type: notificationType,
+                        }),
+                    }
+                );
+                const result = await response.json();
+                console.log('Push notification result:', result);
+            } catch (pushError) {
+                console.log('Push notification skipped (Edge Function not deployed yet)');
+            }
+
+            setMessage('Notification sent successfully! 🎉');
+            setNotificationTitle('');
+            setNotificationMessage('');
+            setNotificationType('general');
+
+        } catch (error: any) {
+            setIsError(true);
+            setMessage(error.message || 'Failed to send notification');
+        } finally {
+            setSendingNotification(false);
+        }
+    };
+
     const handleLogout = async () => {
         await supabase.auth.signOut();
         document.cookie = 'admin_session=; Max-Age=0; path=/;'; // Clear fallback cookie
@@ -377,22 +443,28 @@ export default function AdminDashboard() {
                 </div>
 
                 {/* Tabs */}
-                <div className="flex gap-4 mb-6 border-b border-stone-200">
+                <div className="flex gap-4 mb-6 border-b border-stone-200 overflow-x-auto">
                     <button
                         onClick={() => setActiveTab('products')}
-                        className={`pb-3 font-bold text-sm transition-colors border-b-2 ${activeTab === 'products' ? 'border-primary text-primary' : 'border-transparent text-stone-500 hover:text-stone-800'}`}
+                        className={`pb-3 font-bold text-sm transition-colors border-b-2 whitespace-nowrap ${activeTab === 'products' ? 'border-primary text-primary' : 'border-transparent text-stone-500 hover:text-stone-800'}`}
                     >
                         Manage Products
                     </button>
                     <button
                         onClick={() => setActiveTab('banners')}
-                        className={`pb-3 font-bold text-sm transition-colors border-b-2 ${activeTab === 'banners' ? 'border-primary text-primary' : 'border-transparent text-stone-500 hover:text-stone-800'}`}
+                        className={`pb-3 font-bold text-sm transition-colors border-b-2 whitespace-nowrap ${activeTab === 'banners' ? 'border-primary text-primary' : 'border-transparent text-stone-500 hover:text-stone-800'}`}
                     >
                         Manage Banners
                     </button>
                     <button
+                        onClick={() => setActiveTab('notifications')}
+                        className={`pb-3 font-bold text-sm transition-colors border-b-2 whitespace-nowrap flex items-center gap-1 ${activeTab === 'notifications' ? 'border-primary text-primary' : 'border-transparent text-stone-500 hover:text-stone-800'}`}
+                    >
+                        <Bell size={14} /> Push Notifications
+                    </button>
+                    <button
                         onClick={() => setActiveTab('users')}
-                        className={`pb-3 font-bold text-sm transition-colors border-b-2 ${activeTab === 'users' ? 'border-primary text-primary' : 'border-transparent text-stone-500 hover:text-stone-800'}`}
+                        className={`pb-3 font-bold text-sm transition-colors border-b-2 whitespace-nowrap ${activeTab === 'users' ? 'border-primary text-primary' : 'border-transparent text-stone-500 hover:text-stone-800'}`}
                     >
                         User List
                     </button>
@@ -655,6 +727,102 @@ export default function AdminDashboard() {
                                         ))}
                                     </div>
                                 )}
+                            </div>
+                        </div>
+                    </div>
+                ) : activeTab === 'notifications' ? (
+                    // Notifications Tab
+                    <div className="max-w-xl mx-auto">
+                        <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-200">
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="w-12 h-12 bg-primary/10 text-primary rounded-2xl flex items-center justify-center">
+                                    <Bell size={24} />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-lg text-stone-900">Send Push Notification</h3>
+                                    <p className="text-xs text-stone-500">Send notification to all app users</p>
+                                </div>
+                            </div>
+
+                            {message && (
+                                <div className={`mb-4 p-3 rounded-xl flex items-center gap-2 text-sm ${isError ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+                                    {isError ? <AlertCircle size={16} /> : <CheckCircle size={16} />}
+                                    <span className="font-medium">{message}</span>
+                                </div>
+                            )}
+
+                            <form onSubmit={handleSendNotification} className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-stone-600 mb-1">Notification Type</label>
+                                    <select
+                                        value={notificationType}
+                                        onChange={(e) => setNotificationType(e.target.value as 'general' | 'offer' | 'order')}
+                                        className="w-full px-3 py-2 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white text-sm"
+                                    >
+                                        <option value="general">📢 General Announcement</option>
+                                        <option value="offer">🏷️ Offer / Discount</option>
+                                        <option value="order">📦 Order Update</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-stone-600 mb-1">Title</label>
+                                    <input
+                                        type="text"
+                                        value={notificationTitle}
+                                        onChange={(e) => setNotificationTitle(e.target.value)}
+                                        className="w-full px-3 py-2 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                                        placeholder="e.g. 50% Off on Vegetables!"
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-stone-600 mb-1">Message</label>
+                                    <textarea
+                                        value={notificationMessage}
+                                        onChange={(e) => setNotificationMessage(e.target.value)}
+                                        rows={3}
+                                        className="w-full px-3 py-2 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm resize-none"
+                                        placeholder="Write your notification message here..."
+                                        required
+                                    />
+                                </div>
+
+                                {/* Preview */}
+                                <div className="bg-stone-50 p-4 rounded-xl border border-stone-100">
+                                    <p className="text-xs text-stone-500 mb-2 font-bold">Preview</p>
+                                    <div className="bg-white p-3 rounded-lg shadow-sm border border-stone-200 flex gap-3">
+                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white ${notificationType === 'offer' ? 'bg-orange-500' : notificationType === 'order' ? 'bg-blue-500' : 'bg-primary'}`}>
+                                            {notificationType === 'offer' ? '🏷️' : notificationType === 'order' ? '📦' : '📢'}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="font-bold text-sm text-stone-900 truncate">{notificationTitle || 'Notification Title'}</p>
+                                            <p className="text-xs text-stone-500 line-clamp-2">{notificationMessage || 'Notification message will appear here...'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <button
+                                    type="submit"
+                                    disabled={sendingNotification}
+                                    className="w-full bg-primary text-white font-bold py-3 rounded-xl hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 text-sm"
+                                >
+                                    {sendingNotification ? 'Sending...' : (
+                                        <>
+                                            <Send size={16} />
+                                            Send to All Users
+                                        </>
+                                    )}
+                                </button>
+                            </form>
+
+                            <div className="mt-6 pt-4 border-t border-stone-100 text-xs text-stone-500">
+                                <p>💡 <strong>Tip:</strong> Notifications will appear in:</p>
+                                <ul className="list-disc ml-5 mt-1 space-y-1">
+                                    <li>Phone&apos;s notification tray (requires Firebase setup)</li>
+                                    <li>App&apos;s notification page</li>
+                                </ul>
                             </div>
                         </div>
                     </div>
