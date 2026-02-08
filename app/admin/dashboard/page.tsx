@@ -340,38 +340,28 @@ export default function AdminDashboard() {
         setIsError(false);
 
         try {
-            // Insert notification directly to Supabase
-            const { error: dbError } = await supabase
-                .from('notifications')
-                .insert({
-                    title: notificationTitle,
-                    message: notificationMessage,
-                    type: notificationType,
-                });
+            // Send notification via Edge Function (handles DB insert + push notification)
+            const response = await fetch(
+                `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-push-notification`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+                    },
+                    body: JSON.stringify({
+                        title: notificationTitle,
+                        message: notificationMessage,
+                        type: notificationType,
+                    }),
+                }
+            );
 
-            if (dbError) throw dbError;
+            const result = await response.json();
+            console.log('Push notification result:', result);
 
-            // Try to send push notification via Edge Function
-            try {
-                const response = await fetch(
-                    `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-push-notification`,
-                    {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
-                        },
-                        body: JSON.stringify({
-                            title: notificationTitle,
-                            message: notificationMessage,
-                            type: notificationType,
-                        }),
-                    }
-                );
-                const result = await response.json();
-                console.log('Push notification result:', result);
-            } catch (pushError) {
-                console.log('Push notification skipped (Edge Function not deployed yet)');
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to send notification');
             }
 
             setMessage('Notification sent successfully! 🎉');
@@ -817,13 +807,7 @@ export default function AdminDashboard() {
                                 </button>
                             </form>
 
-                            <div className="mt-6 pt-4 border-t border-stone-100 text-xs text-stone-500">
-                                <p>💡 <strong>Tip:</strong> Notifications will appear in:</p>
-                                <ul className="list-disc ml-5 mt-1 space-y-1">
-                                    <li>Phone&apos;s notification tray (requires Firebase setup)</li>
-                                    <li>App&apos;s notification page</li>
-                                </ul>
-                            </div>
+
                         </div>
                     </div>
                 ) : (
