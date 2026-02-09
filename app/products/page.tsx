@@ -14,6 +14,7 @@ interface Product {
     image_url: string;
     description: string;
     unit?: string;
+    unit_quantity?: number;
 }
 
 export default function ProductsPage() {
@@ -90,7 +91,11 @@ export default function ProductsPage() {
                                         <div className="flex justify-between items-center">
                                             <span className="text-lg font-extrabold text-primary">
                                                 ₹{product.price}
-                                                {product.unit && <span className="text-sm font-medium text-stone-500 ml-1">/ {product.unit}</span>}
+                                                {product.unit && (
+                                                    <span className="text-sm font-medium text-stone-500 ml-1">
+                                                        / {(product.unit_quantity || 0) > 0 ? `${product.unit_quantity} ` : ''}{product.unit}
+                                                    </span>
+                                                )}
                                             </span>
                                             <button className="bg-stone-900 text-white p-2 rounded-lg hover:bg-primary transition-colors">
                                                 <ShoppingBag size={18} />

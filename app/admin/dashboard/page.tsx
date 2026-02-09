@@ -13,6 +13,7 @@ interface Product {
     image_url: string;
     description: string;
     unit?: string;
+    unit_quantity?: number;
 }
 
 interface AppUser {
@@ -41,6 +42,7 @@ export default function AdminDashboard() {
         category: '',
         description: '',
         unit: '',
+        unit_quantity: '',
     });
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [imageUrl, setImageUrl] = useState(''); // For preview/direct URL
@@ -243,6 +245,7 @@ export default function AdminDashboard() {
                         category: formData.category,
                         description: formData.description,
                         unit: formData.unit,
+                        unit_quantity: parseFloat(formData.unit_quantity) || 0,
                         image_url: finalImageUrl,
                     })
                     .eq('id', editingProductId);
@@ -260,6 +263,7 @@ export default function AdminDashboard() {
                             category: formData.category,
                             description: formData.description,
                             unit: formData.unit,
+                            unit_quantity: parseFloat(formData.unit_quantity) || 0,
                             image_url: finalImageUrl,
                         }
                     ]);
@@ -269,7 +273,7 @@ export default function AdminDashboard() {
             }
 
             // Reset form
-            setFormData({ name: '', price: '', category: '', description: '', unit: '' });
+            setFormData({ name: '', price: '', category: '', description: '', unit: '', unit_quantity: '' });
             setImageFile(null);
             setImageUrl('');
             setEditingProductId(null);
@@ -289,6 +293,7 @@ export default function AdminDashboard() {
             category: product.category,
             description: product.description,
             unit: product.unit || '',
+            unit_quantity: product.unit_quantity ? product.unit_quantity.toString() : '',
         });
         setImageUrl(product.image_url || '');
         setEditingProductId(product.id);
@@ -297,7 +302,7 @@ export default function AdminDashboard() {
     };
 
     const handleCancelEdit = () => {
-        setFormData({ name: '', price: '', category: '', description: '', unit: '' });
+        setFormData({ name: '', price: '', category: '', description: '', unit: '', unit_quantity: '' });
         setImageUrl('');
         setImageFile(null);
         setEditingProductId(null);
@@ -518,26 +523,6 @@ export default function AdminDashboard() {
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-bold text-stone-600 mb-1">Unit</label>
-                                            <select
-                                                name="unit"
-                                                value={formData.unit}
-                                                onChange={handleChange}
-                                                className="w-full px-3 py-2 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white text-sm"
-                                                required
-                                            >
-                                                <option value="">Select Unit</option>
-                                                <option value="kg">kg</option>
-                                                <option value="gram">gram</option>
-                                                <option value="piece">piece</option>
-                                                <option value="liter">liter</option>
-                                                <option value="packet">packet</option>
-                                                <option value="dozen">dozen</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <div>
                                             <label className="block text-xs font-bold text-stone-600 mb-1">Category</label>
                                             <select
                                                 name="category"
@@ -555,6 +540,38 @@ export default function AdminDashboard() {
                                                 <option value="Beverages">Beverages</option>
                                                 <option value="Snacks">Snacks</option>
                                                 <option value="Household">Household</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-stone-600 mb-1">Quantity</label>
+                                            <input
+                                                type="number"
+                                                name="unit_quantity"
+                                                value={formData.unit_quantity}
+                                                onChange={handleChange}
+                                                className="w-full px-3 py-2 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                                                placeholder="e.g. 500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-stone-600 mb-1">Unit</label>
+                                            <select
+                                                name="unit"
+                                                value={formData.unit}
+                                                onChange={handleChange}
+                                                className="w-full px-3 py-2 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white text-sm"
+                                                required
+                                            >
+                                                <option value="">Select Unit</option>
+                                                <option value="kg">kg</option>
+                                                <option value="gram">gram</option>
+                                                <option value="piece">piece</option>
+                                                <option value="liter">liter</option>
+                                                <option value="ml">ml</option>
+                                                <option value="packet">packet</option>
+                                                <option value="dozen">dozen</option>
                                             </select>
                                         </div>
                                     </div>
@@ -631,7 +648,12 @@ export default function AdminDashboard() {
                                                     <div className="text-xs text-stone-500">{product.category}</div>
                                                 </div>
                                                 <div className="text-right">
-                                                    <div className="font-bold text-primary text-sm">₹{product.price} {product.unit && <span className="text-xs text-stone-500">/ {product.unit}</span>}</div>
+                                                    <div className="font-bold text-primary text-sm">
+                                                        ₹{product.price}
+                                                        {product.unit && (
+                                                            <span className="text-xs text-stone-500"> / {(product.unit_quantity || 0) > 0 ? `${product.unit_quantity} ` : ''}{product.unit}</span>
+                                                        )}
+                                                    </div>
                                                 </div>
                                                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                                     <button
