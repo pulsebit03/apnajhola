@@ -12,6 +12,7 @@ interface Product {
     category: string;
     image_url: string;
     description: string;
+    unit?: string;
 }
 
 interface AppUser {
@@ -39,6 +40,7 @@ export default function AdminDashboard() {
         price: '',
         category: '',
         description: '',
+        unit: '',
     });
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [imageUrl, setImageUrl] = useState(''); // For preview/direct URL
@@ -240,6 +242,7 @@ export default function AdminDashboard() {
                         price: parseFloat(formData.price),
                         category: formData.category,
                         description: formData.description,
+                        unit: formData.unit,
                         image_url: finalImageUrl,
                     })
                     .eq('id', editingProductId);
@@ -256,6 +259,7 @@ export default function AdminDashboard() {
                             price: parseFloat(formData.price),
                             category: formData.category,
                             description: formData.description,
+                            unit: formData.unit,
                             image_url: finalImageUrl,
                         }
                     ]);
@@ -265,7 +269,7 @@ export default function AdminDashboard() {
             }
 
             // Reset form
-            setFormData({ name: '', price: '', category: '', description: '' });
+            setFormData({ name: '', price: '', category: '', description: '', unit: '' });
             setImageFile(null);
             setImageUrl('');
             setEditingProductId(null);
@@ -284,6 +288,7 @@ export default function AdminDashboard() {
             price: product.price.toString(),
             category: product.category,
             description: product.description,
+            unit: product.unit || '',
         });
         setImageUrl(product.image_url || '');
         setEditingProductId(product.id);
@@ -292,7 +297,7 @@ export default function AdminDashboard() {
     };
 
     const handleCancelEdit = () => {
-        setFormData({ name: '', price: '', category: '', description: '' });
+        setFormData({ name: '', price: '', category: '', description: '', unit: '' });
         setImageUrl('');
         setImageFile(null);
         setEditingProductId(null);
@@ -513,6 +518,26 @@ export default function AdminDashboard() {
                                             />
                                         </div>
                                         <div>
+                                            <label className="block text-xs font-bold text-stone-600 mb-1">Unit</label>
+                                            <select
+                                                name="unit"
+                                                value={formData.unit}
+                                                onChange={handleChange}
+                                                className="w-full px-3 py-2 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white text-sm"
+                                                required
+                                            >
+                                                <option value="">Select Unit</option>
+                                                <option value="kg">kg</option>
+                                                <option value="gram">gram</option>
+                                                <option value="piece">piece</option>
+                                                <option value="liter">liter</option>
+                                                <option value="packet">packet</option>
+                                                <option value="dozen">dozen</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div>
                                             <label className="block text-xs font-bold text-stone-600 mb-1">Category</label>
                                             <select
                                                 name="category"
@@ -606,7 +631,7 @@ export default function AdminDashboard() {
                                                     <div className="text-xs text-stone-500">{product.category}</div>
                                                 </div>
                                                 <div className="text-right">
-                                                    <div className="font-bold text-primary text-sm">₹{product.price}</div>
+                                                    <div className="font-bold text-primary text-sm">₹{product.price} {product.unit && <span className="text-xs text-stone-500">/ {product.unit}</span>}</div>
                                                 </div>
                                                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                                     <button
@@ -806,8 +831,6 @@ export default function AdminDashboard() {
                                     )}
                                 </button>
                             </form>
-
-
                         </div>
                     </div>
                 ) : (
