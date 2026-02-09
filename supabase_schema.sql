@@ -181,3 +181,7 @@ drop trigger if exists on_profile_user_deleted on public.app_users;
 create trigger on_profile_user_deleted
   after delete on public.app_users
   for each row execute procedure public.handle_user_delete();
+
+-- Add unit and quantity columns to products
+alter table products add column if not exists unit text;
+alter table products add column if not exists unit_quantity numeric;
