@@ -1,0 +1,22 @@
+# ApnaJhola
+
+> Fresh Groceries, Delivered Fast.
+
+ApnaJhola is a hyper-local grocery delivery service delivering fresh vegetables, fruits, and daily essentials in minutes.
+
+## Core Features
+- **Super Fast Delivery**: Get your order delivered in as fast as 10-20 minutes.
+- **Quality Guarantee**: Freshness ensured. Instant replacement if not satisfied.
+- **No Minimum Order**: We fulfill orders of all sizes.
+
+## Navigation
+- [Home](https://apnajhola.in/)
+- [Products](https://apnajhola.in/products)
+- [About Us](https://apnajhola.in/about)
+- [Contact](https://apnajhola.in/contact)
+- [Privacy Policy](https://apnajhola.in/privacy-policy)
+- [Terms of Use](https://apnajhola.in/terms-of-use)
+
+## Technical Details
+- Built with Next.js 16 and Tailwind CSS.
+- Mobile-first responsive design.
