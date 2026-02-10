@@ -3,6 +3,7 @@
 > Fresh Groceries, Delivered Fast.
 
 ApnaJhola is a hyper-local grocery delivery service delivering fresh vegetables, fruits, and daily essentials in minutes.
+Currently serving exclusively in **Renukoot, Sonebhadra**.
 
 ## Core Features
 - **Super Fast Delivery**: Get your order delivered in as fast as 10-20 minutes.

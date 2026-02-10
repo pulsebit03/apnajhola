@@ -39,8 +39,9 @@ export default function Home() {
             transition={{ duration: 0.8 }}
             className="space-y-8"
           >
-            <div className="inline-block px-4 py-1.5 bg-green-50 border border-green-100 rounded-full text-primary font-semibold text-sm">
-              🚀 Delivered in 20 minutes
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-100 rounded-full text-primary font-semibold text-sm">
+              <MapPin size={16} />
+              Serving exclusively in Renukoot, Sonebhadra
             </div>
             <h1 className="text-5xl md:text-7xl font-extrabold text-stone-900 leading-[1.1]">
               Fresh Groceries, <br />
