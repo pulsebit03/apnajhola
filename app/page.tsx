@@ -187,6 +187,32 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Live Stats Section */}
+      <section className="py-20 bg-stone-50 border-y border-stone-100">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
+            {[
+              { label: "Successful Orders", value: "10k+", color: "text-blue-600" },
+              { label: "Fresh Products", value: "500+", color: "text-green-600" },
+              { label: "Partner Stores", value: "20+", color: "text-orange-600" },
+              { label: "Happy Customers", value: "4.8/5", color: "text-yellow-600" }
+            ].map((stat, idx) => (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, scale: 0.9 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ delay: idx * 0.1 }}
+                className="text-center p-6 bg-white rounded-3xl border border-stone-100 shadow-sm"
+              >
+                <div className={`text-3xl md:text-4xl font-black mb-2 ${stat.color}`}>{stat.value}</div>
+                <div className="text-sm font-bold text-stone-500 uppercase tracking-wider">{stat.label}</div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* How it Works / Showcase */}
       <section className="py-24 bg-stone-900 text-white overflow-hidden" id="how-it-works">
         <div className="max-w-6xl mx-auto px-6 relative">

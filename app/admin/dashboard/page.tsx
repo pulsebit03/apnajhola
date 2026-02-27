@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Image as ImageIcon, CheckCircle, AlertCircle, Trash2, Users, Package, TrendingUp, LogOut, Pencil, X, Search, Ban, Unlock, Bell, Send } from 'lucide-react';
+import { Plus, Image as ImageIcon, ShoppingBag, Ticket, CheckCircle, AlertCircle, Trash2, Users, Package, TrendingUp, LogOut, Pencil, X, Search, Ban, Unlock, Bell, Send } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface Product {
@@ -28,12 +28,18 @@ interface AppUser {
 
 export default function AdminDashboard() {
     const router = useRouter();
-    const [activeTab, setActiveTab] = useState<'products' | 'users' | 'banners' | 'notifications'>('products');
+    const [activeTab, setActiveTab] = useState<'products' | 'users' | 'banners' | 'notifications' | 'orders' | 'coupons'>('products');
 
     // Data State
     const [products, setProducts] = useState<Product[]>([]);
     const [users, setUsers] = useState<AppUser[]>([]);
-    const [stats, setStats] = useState({ totalProducts: 0, totalUsers: 0, totalEarnings: 0 });
+    const [orders, setOrders] = useState<any[]>([]);
+    const [stats, setStats] = useState({
+        totalProducts: 0,
+        totalUsers: 0,
+        totalEarnings: 0,
+        todayOrders: 0
+    });
 
     // Form State
     const [formData, setFormData] = useState({
@@ -58,6 +64,21 @@ export default function AdminDashboard() {
     useEffect(() => {
         checkUser();
         fetchData();
+
+        // Real-time subscription for orders
+        const channel = supabase
+            .channel('admin-dashboard-realtime')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+                fetchData();
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'coupons' }, () => {
+                fetchData();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     const checkUser = async () => {
@@ -92,10 +113,11 @@ export default function AdminDashboard() {
             .from('app_users')
             .select('*', { count: 'exact' });
 
-        // Fetch Orders for Earnings
+        // Fetch Orders for Earnings & Management
         const { data: ordersData } = await supabase
             .from('orders')
-            .select('total_amount');
+            .select('*')
+            .order('created_at', { ascending: false });
 
         // Fetch Banners
         const { data: bannersData } = await supabase
@@ -103,17 +125,28 @@ export default function AdminDashboard() {
             .select('*')
             .order('created_at', { ascending: false });
 
+        // Fetch Coupons
+        const { data: couponsData } = await supabase
+            .from('coupons')
+            .select('*')
+            .order('created_at', { ascending: false });
+
         if (bannersData) setBanners(bannersData);
         if (productsData) setProducts(productsData);
         if (usersData) setUsers(usersData);
+        if (ordersData) setOrders(ordersData);
+        if (couponsData) setCoupons(couponsData);
 
         const totalEarnings = ordersData?.reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0) || 0;
+        const today = new Date().toISOString().split('T')[0];
+        const todayOrders = ordersData?.filter(o => o.created_at.startsWith(today)).length || 0;
 
         // Update Stats
         setStats({
             totalProducts: productsData?.length || 0,
             totalUsers: usersData?.length || 0,
-            totalEarnings: totalEarnings
+            totalEarnings: totalEarnings,
+            todayOrders: todayOrders
         });
 
         setFetching(false);
@@ -127,6 +160,7 @@ export default function AdminDashboard() {
     const [bannerImageFile, setBannerImageFile] = useState<File | null>(null);
     const [bannerImageUrl, setBannerImageUrl] = useState('');
     const [banners, setBanners] = useState<any[]>([]);
+    const [coupons, setCoupons] = useState<any[]>([]);
 
     // Notification states
     const [notificationTitle, setNotificationTitle] = useState('');
@@ -393,6 +427,76 @@ export default function AdminDashboard() {
         router.push('/admin/login');
     };
 
+    const handleUpdateStatus = async (orderId: string, newStatus: string) => {
+        setLoading(true);
+        try {
+            const { error } = await supabase
+                .from('orders')
+                .update({ status: newStatus })
+                .eq('id', orderId);
+
+            if (error) throw error;
+            setMessage('Order status updated!');
+            setIsError(false);
+            fetchData();
+        } catch (err: any) {
+            setMessage(err.message || 'Failed to update status');
+            setIsError(true);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Coupon logic
+    const [couponForm, setCouponForm] = useState({
+        code: '',
+        discount_type: 'percentage',
+        discount_value: '',
+        min_order_amount: '0',
+        active: true
+    });
+
+    const handleCouponSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            const { error } = await supabase
+                .from('coupons')
+                .insert([{
+                    code: couponForm.code.toUpperCase(),
+                    discount_type: couponForm.discount_type,
+                    discount_value: parseFloat(couponForm.discount_value),
+                    min_order_amount: parseFloat(couponForm.min_order_amount),
+                    active: couponForm.active
+                }]);
+
+            if (error) throw error;
+            setCouponForm({ code: '', discount_type: 'percentage', discount_value: '', min_order_amount: '0', active: true });
+            setMessage('Coupon created!');
+            setIsError(false);
+            fetchData();
+        } catch (err: any) {
+            setMessage(err.message || 'Failed to create coupon');
+            setIsError(true);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDeleteCoupon = async (id: string) => {
+        if (!confirm('Delete this coupon?')) return;
+        const { error } = await supabase.from('coupons').delete().eq('id', id);
+        if (!error) fetchData();
+    };
+
+    const handleToggleCoupon = async (id: string, currentStatus: boolean) => {
+        const { error } = await supabase
+            .from('coupons')
+            .update({ active: !currentStatus })
+            .eq('id', id);
+        if (!error) fetchData();
+    };
+
     return (
         <div className="min-h-screen bg-stone-50 font-sans">
             <nav className="bg-white border-b border-stone-200 px-6 py-4 flex justify-between items-center sticky top-0 z-50">
@@ -412,13 +516,13 @@ export default function AdminDashboard() {
             <main className="max-w-7xl mx-auto p-6 md:p-8">
 
                 {/* Analytics Widgets */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                     <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 flex items-center gap-4">
                         <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
                             <Package size={24} />
                         </div>
                         <div>
-                            <p className="text-stone-500 text-sm font-medium">Total Products</p>
+                            <p className="text-stone-500 text-sm font-medium">Products</p>
                             <p className="text-2xl font-extrabold text-stone-900">{stats.totalProducts}</p>
                         </div>
                     </div>
@@ -432,11 +536,20 @@ export default function AdminDashboard() {
                         </div>
                     </div>
                     <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 flex items-center gap-4">
+                        <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center">
+                            <ShoppingBag size={24} />
+                        </div>
+                        <div>
+                            <p className="text-stone-500 text-sm font-medium">Today Orders</p>
+                            <p className="text-2xl font-extrabold text-stone-900 text-purple-600">{stats.todayOrders}</p>
+                        </div>
+                    </div>
+                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 flex items-center gap-4">
                         <div className="w-12 h-12 bg-green-50 text-green-600 rounded-2xl flex items-center justify-center">
                             <TrendingUp size={24} />
                         </div>
                         <div>
-                            <p className="text-stone-500 text-sm font-medium">Total Earnings</p>
+                            <p className="text-stone-500 text-sm font-medium">Tot. Earnings</p>
                             <p className="text-2xl font-extrabold text-stone-900">₹{stats.totalEarnings.toLocaleString()}</p>
                         </div>
                     </div>
@@ -445,10 +558,22 @@ export default function AdminDashboard() {
                 {/* Tabs */}
                 <div className="flex gap-4 mb-6 border-b border-stone-200 overflow-x-auto">
                     <button
+                        onClick={() => setActiveTab('orders')}
+                        className={`pb-3 font-bold text-sm transition-colors border-b-2 whitespace-nowrap ${activeTab === 'orders' ? 'border-primary text-primary' : 'border-transparent text-stone-500 hover:text-stone-800'}`}
+                    >
+                        Manage Orders
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('coupons')}
+                        className={`pb-3 font-bold text-sm transition-colors border-b-2 whitespace-nowrap flex items-center gap-1 ${activeTab === 'coupons' ? 'border-primary text-primary' : 'border-transparent text-stone-500 hover:text-stone-800'}`}
+                    >
+                        <Ticket size={14} /> Coupons
+                    </button>
+                    <button
                         onClick={() => setActiveTab('products')}
                         className={`pb-3 font-bold text-sm transition-colors border-b-2 whitespace-nowrap ${activeTab === 'products' ? 'border-primary text-primary' : 'border-transparent text-stone-500 hover:text-stone-800'}`}
                     >
-                        Manage Products
+                        Inventory
                     </button>
                     <button
                         onClick={() => setActiveTab('banners')}
@@ -460,7 +585,7 @@ export default function AdminDashboard() {
                         onClick={() => setActiveTab('notifications')}
                         className={`pb-3 font-bold text-sm transition-colors border-b-2 whitespace-nowrap flex items-center gap-1 ${activeTab === 'notifications' ? 'border-primary text-primary' : 'border-transparent text-stone-500 hover:text-stone-800'}`}
                     >
-                        <Bell size={14} /> Push Notifications
+                        Push Notifications
                     </button>
                     <button
                         onClick={() => setActiveTab('users')}
@@ -470,7 +595,189 @@ export default function AdminDashboard() {
                     </button>
                 </div>
 
-                {activeTab === 'products' ? (
+                {activeTab === 'orders' ? (
+                    <div className="space-y-6">
+                        <div className="bg-white rounded-3xl shadow-sm border border-stone-200 overflow-hidden">
+                            <div className="p-6 border-b border-stone-100 flex justify-between items-center">
+                                <h3 className="font-bold text-lg text-stone-900">Live Orders</h3>
+                                <button onClick={fetchData} className="px-3 py-1 bg-stone-100 rounded-lg text-xs font-bold text-stone-600 hover:bg-stone-200">Refresh</button>
+                            </div>
+
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="bg-stone-50 text-stone-500 uppercase text-[10px] font-bold tracking-wider">
+                                            <th className="px-6 py-4">ID</th>
+                                            <th className="px-6 py-4">Customer</th>
+                                            <th className="px-6 py-4">Amount</th>
+                                            <th className="px-6 py-4">Status</th>
+                                            <th className="px-6 py-4 text-right">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-stone-100 text-sm">
+                                        {fetching ? (
+                                            <tr><td colSpan={5} className="px-6 py-12 text-center text-stone-400">Fetching live orders...</td></tr>
+                                        ) : orders.length === 0 ? (
+                                            <tr><td colSpan={5} className="px-6 py-12 text-center text-stone-500">No orders found</td></tr>
+                                        ) : orders.map((order) => (
+                                            <tr key={order.id} className="hover:bg-stone-50 group">
+                                                <td className="px-6 py-4 font-mono font-bold text-blue-600">#{order.id.toString().slice(-6)}</td>
+                                                <td className="px-6 py-4">
+                                                    <div className="font-bold text-stone-900">{order.user_name}</div>
+                                                    <div className="text-xs text-stone-500">{order.user_phone}</div>
+                                                </td>
+                                                <td className="px-6 py-4 font-bold text-stone-900">₹{order.total_amount}</td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${order.status === 'Delivered' ? 'bg-green-100 text-green-700' :
+                                                        order.status === 'Pending' ? 'bg-yellow-100 text-yellow-700' :
+                                                            order.status === 'Accepted' ? 'bg-blue-100 text-blue-700' :
+                                                                'bg-orange-100 text-orange-700'
+                                                        }`}>
+                                                        {order.status}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <select
+                                                        value={order.status}
+                                                        onChange={(e) => handleUpdateStatus(order.id, e.target.value)}
+                                                        className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs font-bold outline-none focus:ring-2 focus:ring-primary/50"
+                                                    >
+                                                        <option value="Pending">Pending</option>
+                                                        <option value="Accepted">Accepted</option>
+                                                        <option value="Out for Delivery">Out for Delivery</option>
+                                                        <option value="Delivered">Delivered</option>
+                                                    </select>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                ) : activeTab === 'coupons' ? (
+                    <div className="grid lg:grid-cols-3 gap-8">
+                        {/* Add Coupon Form */}
+                        <div className="lg:col-span-1">
+                            <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-200">
+                                <h3 className="font-bold text-lg text-stone-900 mb-4">Create New Coupon</h3>
+                                {message && (
+                                    <div className={`mb-4 p-3 rounded-xl flex items-center gap-2 text-sm ${isError ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+                                        {isError ? <AlertCircle size={16} /> : <CheckCircle size={16} />}
+                                        <span className="font-medium">{message}</span>
+                                    </div>
+                                )}
+                                <form onSubmit={handleCouponSubmit} className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-stone-600 mb-1 tracking-wider uppercase">Coupon Code</label>
+                                        <input
+                                            type="text"
+                                            value={couponForm.code}
+                                            onChange={(e) => setCouponForm({ ...couponForm, code: e.target.value.toUpperCase() })}
+                                            className="w-full px-4 py-3 rounded-2xl border border-stone-200 focus:outline-none focus:ring-4 focus:ring-primary/10 text-sm font-bold placeholder:font-normal"
+                                            placeholder="e.g. SAVE20"
+                                            required
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-stone-600 mb-1">Type</label>
+                                            <select
+                                                value={couponForm.discount_type}
+                                                onChange={(e) => setCouponForm({ ...couponForm, discount_type: e.target.value })}
+                                                className="w-full px-4 py-3 rounded-2xl border border-stone-200 bg-white text-sm font-medium"
+                                            >
+                                                <option value="percentage">Percentage (%)</option>
+                                                <option value="fixed">Fixed (₹)</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-stone-600 mb-1">Value</label>
+                                            <input
+                                                type="number"
+                                                value={couponForm.discount_value}
+                                                onChange={(e) => setCouponForm({ ...couponForm, discount_value: e.target.value })}
+                                                className="w-full px-4 py-3 rounded-2xl border border-stone-200 text-sm font-bold"
+                                                placeholder="0"
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-stone-600 mb-1">Min Order Amount (₹)</label>
+                                        <input
+                                            type="number"
+                                            value={couponForm.min_order_amount}
+                                            onChange={(e) => setCouponForm({ ...couponForm, min_order_amount: e.target.value })}
+                                            className="w-full px-4 py-3 rounded-2xl border border-stone-200 text-sm font-medium"
+                                            placeholder="0"
+                                        />
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        disabled={loading}
+                                        className="w-full bg-stone-900 text-white font-bold py-4 rounded-2xl hover:bg-stone-800 transition-all flex items-center justify-center gap-2 disabled:opacity-50 text-sm shadow-xl shadow-stone-200"
+                                    >
+                                        {loading ? 'Creating...' : <> <Plus size={18} /> Create Coupon </>}
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        {/* Coupon List */}
+                        <div className="lg:col-span-2">
+                            <div className="bg-white rounded-3xl shadow-sm border border-stone-200 overflow-hidden">
+                                <div className="p-6 border-b border-stone-100 flex justify-between items-center">
+                                    <h3 className="font-bold text-lg text-stone-900">Active Promo Codes</h3>
+                                    <button onClick={fetchData} className="text-xs text-primary font-bold hover:underline">Refresh</button>
+                                </div>
+                                <div className="divide-y divide-stone-100">
+                                    {fetching ? (
+                                        <div className="p-12 text-center text-stone-400">Loading coupons...</div>
+                                    ) : coupons.length === 0 ? (
+                                        <div className="p-12 text-center text-stone-500 italic">No coupons created yet.</div>
+                                    ) : coupons.map((coupon: any) => (
+                                        <div key={coupon.id} className="p-4 md:p-6 flex items-center justify-between hover:bg-stone-50 transition-colors">
+                                            <div className="flex items-center gap-4">
+                                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${coupon.active ? 'bg-green-50 text-green-600' : 'bg-stone-100 text-stone-400'}`}>
+                                                    <Ticket size={24} />
+                                                </div>
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-black text-stone-900 tracking-tight">{coupon.code}</span>
+                                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${coupon.active ? 'bg-green-100 text-green-700' : 'bg-stone-100 text-stone-500'}`}>
+                                                            {coupon.active ? 'Active' : 'Inactive'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-xs font-medium text-stone-500 mt-0.5">
+                                                        {coupon.discount_type === 'percentage' ? `${coupon.discount_value}% OFF` : `₹${coupon.discount_value} OFF`}
+                                                        {parseFloat(coupon.min_order_amount) > 0 && ` • Min ₹${coupon.min_order_amount}`}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => handleToggleCoupon(coupon.id, coupon.active)}
+                                                    className={`p-2 rounded-xl transition-all ${coupon.active ? 'bg-stone-100 text-stone-600 hover:bg-orange-50 hover:text-orange-600' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}
+                                                    title={coupon.active ? 'Deactivate' : 'Activate'}
+                                                >
+                                                    {coupon.active ? <Ban size={18} /> : <Unlock size={18} />}
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteCoupon(coupon.id)}
+                                                    className="p-2 bg-stone-100 text-stone-400 hover:bg-red-50 hover:text-red-600 rounded-xl transition-all"
+                                                    title="Delete"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ) : activeTab === 'products' ? (
                     <div className="grid lg:grid-cols-3 gap-8">
                         {/* Add Product Form */}
                         <div className="lg:col-span-1 space-y-8">
